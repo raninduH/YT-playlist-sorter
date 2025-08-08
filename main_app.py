@@ -461,11 +461,69 @@ class PlaylistSorterQt(QWidget):
             nextPageToken = data.get('nextPageToken')
             if not nextPageToken:
                 break
-        html = ''
+        # Clear previous results
+        self.channel_result_box.clear()
+        # Create a widget to hold playlist entries
+        result_widget = QWidget()
+        result_layout = QVBoxLayout()
+        result_widget.setLayout(result_layout)
+
         for p in playlists:
             link = f"https://www.youtube.com/playlist?list={p['playlist_id']}"
-            html += f"<b>{p['title']}</b><br><a href='{link}'>{link}</a><br><br>"
-        self.channel_result_box.setHtml(html)
+            entry_frame = QFrame()
+            entry_layout = QHBoxLayout()
+            entry_frame.setLayout(entry_layout)
+
+            # Left: Vertical layout for title and link
+            left_widget = QWidget()
+            left_layout = QVBoxLayout()
+            left_layout.setContentsMargins(0, 0, 0, 0)
+            left_layout.setSpacing(2)
+            left_widget.setLayout(left_layout)
+
+            title_label = QLabel(f"<b>{p['title']}</b>")
+            title_label.setTextFormat(Qt.RichText)
+            left_layout.addWidget(title_label)
+
+            link_label = QLabel(f"<a href='{link}'>{link}</a>")
+            link_label.setTextFormat(Qt.RichText)
+            link_label.setOpenExternalLinks(True)
+            left_layout.addWidget(link_label)
+
+            entry_layout.addWidget(left_widget)
+
+            # Right: Load to sorter button
+            btn = QPushButton("Load to sorter")
+            btn.setFixedSize(120, 30)
+            btn.setStyleSheet('''
+                QPushButton {
+                    background: #4f8cff;
+                    color: white;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 15px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background: #357ae8;
+                }
+            ''')
+            btn.clicked.connect(lambda checked, lnk=link: self.load_playlist_to_sorter(lnk))
+            entry_layout.addWidget(btn)
+
+            result_layout.addWidget(entry_frame)
+
+        # Set the widget in the QTextBrowser using setCentralWidget if available, else fallback to HTML
+        # QTextBrowser does not support widgets directly, so use a QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(result_widget)
+        # Replace the QTextBrowser with the scroll area
+        parent_layout = self.channel_result_box.parentWidget().layout()
+        parent_layout.removeWidget(self.channel_result_box)
+        self.channel_result_box.setParent(None)
+        parent_layout.addWidget(scroll)
+        self.channel_result_scroll = scroll
 
     def sort_playlist(self):
         url = self.url_entry.text().strip()
