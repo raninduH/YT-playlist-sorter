@@ -1,10 +1,19 @@
 import os
 import requests
+import json
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QRadioButton, QButtonGroup, QMessageBox, QSizePolicy, QTabWidget
+    QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QRadioButton, QButtonGroup, QMessageBox, QSizePolicy, QTabWidget,
+    QScrollArea, QHBoxLayout, QFrame
 )
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QTextCursor
 import sys
+
+# Import link colors from config.py
+from config import CLICKED_LINK_COLOR, UNCLICKED_LINK_COLOR
+from PyQt5.QtCore import QSize
+from PyQt5.QtGui import QFontMetrics
 
 load_dotenv()
 API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -48,6 +57,9 @@ def fetch_playlist_items(playlist_id):
 
 def sort_videos(videos, ascending=True):
     return sorted(videos, key=lambda x: x['added_at'], reverse=not ascending)
+
+
+
 
 class PlaylistSorterQt(QWidget):
     def __init__(self):
@@ -114,14 +126,267 @@ class PlaylistSorterQt(QWidget):
         tab2.setLayout(tab2_layout)
         self.tabs.addTab(tab2, "Channel Playlists")
 
+        # Tab 3: Viewed Playlists
+        tab3 = QWidget()
+        tab3_layout = QVBoxLayout()
+
+        # All required PyQt5 widgets are already imported at the top
+        self.viewed_scroll = QScrollArea()
+        self.viewed_scroll.setWidgetResizable(True)
+        self.viewed_container = QWidget()
+        self.viewed_layout = QVBoxLayout()
+        self.viewed_container.setLayout(self.viewed_layout)
+        self.viewed_scroll.setWidget(self.viewed_container)
+        tab3_layout.addWidget(self.viewed_scroll)
+
+        tab3.setLayout(tab3_layout)
+        self.tabs.addTab(tab3, "Viewed Playlists")
+
         self.setLayout(main_layout)
+
+        # For tracking current playlist and clicked links
+        self.current_playlist_id = None
+        self.clicked_links = set()
+
+        # Load viewed playlists
+        self.load_viewed_playlists()
+
+        # Connect tab change to refresh viewed playlists
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+
+    def on_tab_changed(self, idx):
+        # If viewed playlists tab is selected, refresh
+        if self.tabs.tabText(idx) == "Viewed Playlists":
+            self.load_viewed_playlists()
+
+    def load_viewed_playlists(self):
+        # Clear layout
+        while self.viewed_layout.count():
+            item = self.viewed_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        # Scan memory folder for playlist JSONs
+        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        if not os.path.exists(memory_dir):
+            return
+        files = [f for f in os.listdir(memory_dir) if f.endswith('.json')]
+        playlists = []
+        for fname in files:
+            try:
+                with open(os.path.join(memory_dir, fname), 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    playlists.append(data)
+            except Exception:
+                continue
+        
+        def elide_label(label, max_width):
+            fm = QFontMetrics(label.font())
+            text = label.text()
+            elided = fm.elidedText(text, Qt.ElideRight, max_width)
+            label.setText(elided)
+        
+        for p in playlists:
+            card = QFrame()
+            card.setFrameShape(QFrame.StyledPanel)
+            card.setFixedHeight(80)  # Reduced height for better fit
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            card.setStyleSheet('''
+                QFrame {
+                    background: #f5f7fa;
+                    border-radius: 8px;
+                    margin: 4px;
+                    padding: 8px;
+                    border: 1px solid #e0e0e0;
+                }
+                QLabel {
+                    border: none;
+                    margin: 0px;
+                    padding: 0px;
+                }
+            ''')
+            
+            # Main horizontal layout
+            main_layout = QHBoxLayout()
+            main_layout.setContentsMargins(0, 0, 0, 0)
+            main_layout.setSpacing(12)
+            
+            # Left section: Video count (compact)
+            vid_count_widget = QWidget()
+            vid_count_widget.setFixedSize(60, 60)
+            vid_count_layout = QVBoxLayout()
+            vid_count_layout.setContentsMargins(0, 0, 0, 0)
+            vid_count_layout.setSpacing(0)
+            
+            vid_count = QLabel(str(p.get('no_of_vids', 'N/A')))
+            vid_count.setStyleSheet('font-size: 20px; font-weight: bold; color: #222;')
+            vid_count.setAlignment(Qt.AlignCenter)
+            
+            vid_label = QLabel("videos")
+            vid_label.setStyleSheet('font-size: 12px; color: #888;')
+            vid_label.setAlignment(Qt.AlignCenter)
+            
+            vid_count_layout.addWidget(vid_count)
+            vid_count_layout.addWidget(vid_label)
+            vid_count_widget.setLayout(vid_count_layout)
+            main_layout.addWidget(vid_count_widget)
+            
+            # Center section: Channel and playlist info
+            info_widget = QWidget()
+            info_layout = QHBoxLayout()  # Changed to horizontal layout
+            info_layout.setContentsMargins(0, 0, 0, 0)
+            info_layout.setSpacing(0)  # Remove spacing, use stretch instead
+            
+            # Channel section
+            ch_section = QWidget()
+            ch_layout = QVBoxLayout()
+            ch_layout.setContentsMargins(0, 0, 0, 0)
+            ch_layout.setSpacing(1)
+            
+            ch_label = QLabel("channel name")
+            ch_label.setStyleSheet('font-size: 11px; color: #888; margin: 0px;')
+            ch_label.setAlignment(Qt.AlignLeft)
+            
+            ch_name = QLabel(p.get('channel_name', 'Unknown Channel'))
+            ch_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')
+            ch_name.setAlignment(Qt.AlignLeft)
+            elide_label(ch_name, 120)  # Reduced width for side-by-side layout
+            
+            ch_layout.addWidget(ch_label)
+            ch_layout.addWidget(ch_name)
+            ch_layout.addStretch()
+            ch_section.setLayout(ch_layout)
+            
+            # Playlist section
+            pl_section = QWidget()
+            pl_layout = QVBoxLayout()
+            pl_layout.setContentsMargins(0, 0, 0, 0)
+            pl_layout.setSpacing(1)
+            
+            pl_label = QLabel("playlist name")
+            pl_label.setStyleSheet('font-size: 11px; color: #888; margin: 0px;')  # Same size as channel label
+            pl_label.setAlignment(Qt.AlignLeft)
+            
+            pl_name = QLabel(p.get('playlist_name', 'Unknown Playlist'))
+            pl_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')  # Same size as channel name
+            pl_name.setAlignment(Qt.AlignLeft)
+            elide_label(pl_name, 120)  # Reduced width for side-by-side layout
+            
+            pl_layout.addWidget(pl_label)
+            pl_layout.addWidget(pl_name)
+            pl_layout.addStretch()
+            pl_section.setLayout(pl_layout)
+            
+            info_layout.addStretch(1)  # Add stretch before channel
+            info_layout.addWidget(ch_section)
+            info_layout.addStretch(1)  # Larger stretch between channel and playlist
+            info_layout.addWidget(pl_section)
+            info_layout.addStretch(1)  # Add stretch after playlist
+            info_widget.setLayout(info_layout)
+            main_layout.addWidget(info_widget)
+            
+            # Right section: Load button
+            btn = QPushButton("Load to sorter")
+            btn.setFixedSize(120, 30)
+            btn.setStyleSheet('''
+                QPushButton {
+                    background: #4f8cff;
+                    color: white;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 15px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background: #357ae8;
+                }
+            ''')
+            playlist_link = p.get('playlist_link', None)
+            btn.clicked.connect(lambda checked, link=playlist_link: self.load_playlist_to_sorter(link))
+            main_layout.addWidget(btn)
+            
+            card.setLayout(main_layout)
+            self.viewed_layout.addWidget(card)
 
     def open_link(self, url):
         import webbrowser
         webbrowser.open(url.toString())
+        # Mark link as clicked and update display
+        if self.current_playlist_id:
+            video_url = url.toString()
+            self.clicked_links.add(video_url)
+            self.save_clicked_links()
+            self.update_playlist_display_links()
         # Clear internal navigation to suppress warning
         self.result_box.setSource(url.fromUserInput(''))
         self.channel_result_box.setSource(url.fromUserInput(''))
+
+    def save_clicked_links(self, new_vids_count=None):
+        if not self.current_playlist_id:
+            return
+        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        os.makedirs(memory_dir, exist_ok=True)
+        json_path = os.path.join(memory_dir, f'{self.current_playlist_id}.json')
+
+        # Try to get playlist and channel name
+        playlist_name = getattr(self, 'current_playlist_name', None)
+        channel_name = getattr(self, 'current_channel_name', None)
+        playlist_link = getattr(self, 'current_playlist_link', None)
+        no_of_vids = getattr(self, 'current_no_of_vids', None)
+
+        # Load previous data if exists
+        prev_data = {}
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    prev_data = json.load(f)
+            except Exception:
+                pass
+
+        data = {
+            'clicked_vids': list(self.clicked_links)
+        }
+        if playlist_name:
+            data['playlist_name'] = playlist_name
+        if channel_name:
+            data['channel_name'] = channel_name
+        if playlist_link:
+            data['playlist_link'] = playlist_link
+        if no_of_vids is not None:
+            data['no_of_vids'] = no_of_vids
+        # If new vids count is provided, store for UI
+        if new_vids_count is not None:
+            data['new_vids_count'] = new_vids_count
+
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+
+    def load_clicked_links(self, playlist_id):
+        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        json_path = os.path.join(memory_dir, f'{playlist_id}.json')
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Optionally set playlist/channel name if present
+                    self.current_playlist_name = data.get('playlist_name', None)
+                    self.current_channel_name = data.get('channel_name', None)
+                    return set(data.get('clicked_vids', []))
+            except Exception:
+                return set()
+        return set()
+
+    def update_playlist_display_links(self):
+        # Re-render the playlist links with correct colors
+        if not hasattr(self, 'sorted_videos') or not self.sorted_videos:
+            return
+        html = ''
+        for v in self.sorted_videos:
+            link = f"https://www.youtube.com/watch?v={v['video_id']}"
+            color = CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR
+            html += f"<b>{v['added_at']}</b> - {v['title']}<br><a href='{link}' style='color:{color};'>{link}</a><br><br>"
+        self.result_box.setHtml(html)
+
     def get_channel_id(self, url):
         # Accepts channel URL in the form https://www.youtube.com/channel/CHANNEL_ID or /@handle
         if '/channel/' in url:
@@ -196,12 +461,69 @@ class PlaylistSorterQt(QWidget):
             QMessageBox.critical(self, 'API Error', error)
             return
         ascending = self.radio_asc.isChecked()
-        sorted_videos = sort_videos(videos, ascending)
-        html = ''
-        for v in sorted_videos:
-            link = f"https://www.youtube.com/watch?v={v['video_id']}"
-            html += f"<b>{v['added_at']}</b> - {v['title']}<br><a href='{link}'>{link}</a><br><br>"
-        self.result_box.setHtml(html)
+        self.sorted_videos = sort_videos(videos, ascending)
+        self.current_playlist_id = playlist_id
+
+        # Save the playlist link for later use
+        self.current_playlist_link = url
+
+        # Try to get playlist and channel name from first video snippet
+        playlist_name = None
+        channel_name = None
+        if videos:
+            playlist_name = videos[0].get('playlist_title', None)  # Not available in current API response
+            channel_name = videos[0].get('channel_title', None)    # Not available in current API response
+        # Fallback: Try to get from API
+        # Get playlist details
+        try:
+            playlist_api = 'https://www.googleapis.com/youtube/v3/playlists'
+            params = {
+                'part': 'snippet',
+                'id': playlist_id,
+                'key': API_KEY
+            }
+            resp = requests.get(playlist_api, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get('items', [])
+                if items:
+                    snippet = items[0]['snippet']
+                    playlist_name = snippet.get('title', None)
+                    channel_name = snippet.get('channelTitle', None)
+        except Exception:
+            pass
+        self.current_playlist_name = playlist_name
+        self.current_channel_name = channel_name
+
+        # Save video count
+        self.current_no_of_vids = len(videos)
+
+        # Load previous count for this playlist
+        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        json_path = os.path.join(memory_dir, f'{playlist_id}.json')
+        prev_count = None
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    prev_data = json.load(f)
+                    prev_count = prev_data.get('no_of_vids', None)
+            except Exception:
+                pass
+        new_vids_count = None
+        if prev_count is not None:
+            new_vids_count = self.current_no_of_vids - prev_count
+            if new_vids_count < 0:
+                new_vids_count = 0
+
+        self.clicked_links = self.load_clicked_links(playlist_id)
+        self.update_playlist_display_links()
+        # Save with updated video count and new vids count
+        self.save_clicked_links(new_vids_count=new_vids_count)
+
+    def load_playlist_to_sorter(self, playlist_link):
+        # Switch to Sort Playlist tab and set the playlist link
+        self.tabs.setCurrentIndex(0)
+        self.url_entry.setText(playlist_link if playlist_link else "")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
