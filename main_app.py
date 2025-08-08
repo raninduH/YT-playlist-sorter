@@ -563,29 +563,40 @@ class PlaylistSorterQt(QWidget):
 
         for p in playlists:
             link = f"https://www.youtube.com/playlist?list={p['playlist_id']}"
-            entry_frame = QFrame()
-            entry_layout = QHBoxLayout()
-            entry_frame.setLayout(entry_layout)
+            card = QFrame()
+            card.setFrameShape(QFrame.StyledPanel)
+            card.setStyleSheet('''
+                QFrame {
+                    background: #fafbfc;
+                    border-radius: 8px;
+                    margin: 8px 0px;
+                    padding: 8px;
+                    border: 1px solid #d0d0d0;
+                }
+            ''')
+            card_layout = QHBoxLayout()
+            card_layout.setContentsMargins(16, 8, 16, 8)
+            card_layout.setSpacing(16)
+            card.setLayout(card_layout)
 
-            # Left: Vertical layout for title and link
-            left_widget = QWidget()
-            left_layout = QVBoxLayout()
-            left_layout.setContentsMargins(0, 0, 0, 0)
-            left_layout.setSpacing(2)
-            left_widget.setLayout(left_layout)
-
+            # Info layout (title and link)
+            info_widget = QWidget()
+            info_layout = QVBoxLayout()
+            info_layout.setContentsMargins(0, 0, 0, 0)
+            info_layout.setSpacing(6)
+            info_widget.setLayout(info_layout)
             title_label = QLabel(f"<b>{p['title']}</b>")
             title_label.setTextFormat(Qt.RichText)
-            left_layout.addWidget(title_label)
-
+            title_label.setStyleSheet('font-size:16px; font-weight:bold; color:#222; border:none;')
+            info_layout.addWidget(title_label)
             link_label = QLabel(f"<a href='{link}'>{link}</a>")
             link_label.setTextFormat(Qt.RichText)
             link_label.setOpenExternalLinks(True)
-            left_layout.addWidget(link_label)
+            link_label.setStyleSheet('font-size:13px; color:#357ae8; border:none;')
+            info_layout.addWidget(link_label)
+            card_layout.addWidget(info_widget, 3)
 
-            entry_layout.addWidget(left_widget)
-
-            # Right: Load to sorter button
+            # Load to sorter button
             btn = QPushButton("Load to sorter")
             btn.setFixedSize(120, 30)
             btn.setStyleSheet('''
@@ -602,9 +613,9 @@ class PlaylistSorterQt(QWidget):
                 }
             ''')
             btn.clicked.connect(lambda checked, lnk=link: self.load_playlist_to_sorter(lnk))
-            entry_layout.addWidget(btn)
+            card_layout.addWidget(btn, 1)
 
-            result_layout.addWidget(entry_frame)
+            result_layout.addWidget(card)
 
         # Set the widget in the QTextBrowser using setCentralWidget if available, else fallback to HTML
         # QTextBrowser does not support widgets directly, so use a QScrollArea
