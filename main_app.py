@@ -2,6 +2,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
+from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QRadioButton, QButtonGroup, QMessageBox, QSizePolicy, QTabWidget,
     QScrollArea, QHBoxLayout, QFrame
@@ -65,7 +66,19 @@ def sort_videos(videos, ascending=True):
 
 
 
+
+# Worker thread for fetching playlist items
+class FetchPlaylistWorker(QThread):
+    finished = pyqtSignal(list, object)  # videos, error
+    def __init__(self, playlist_id):
+        super().__init__()
+        self.playlist_id = playlist_id
+    def run(self):
+        videos, error = fetch_playlist_items(self.playlist_id)
+        self.finished.emit(videos, error)
+
 class PlaylistSorterQt(QWidget):
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle('YouTube Playlist Sorter (PyQt5)')
@@ -441,13 +454,30 @@ class PlaylistSorterQt(QWidget):
             info_layout.setContentsMargins(0, 0, 0, 0)
             info_layout.setSpacing(2)
             info_widget.setLayout(info_layout)
-            info_label = QLabel(f"<b>{v['added_at']}</b> - {v['title']}")
-            info_label.setTextFormat(Qt.RichText)
-            info_layout.addWidget(info_label)
+            # Date/time
+            dt_label = QLabel(f"{v['added_at']}")
+            dt_label.setTextFormat(Qt.RichText)
+            info_layout.addWidget(dt_label)
+            # Title
+            title_label = QLabel(v['title'])
+            title_label.setStyleSheet('font-size:15px; font-weight:bold; color:#222; margin-bottom:2px;')
+            info_layout.addWidget(title_label)
+            # Link
             link = f"https://www.youtube.com/watch?v={v['video_id']}"
-            link_label = QLabel(f"<a href='{link}' style='color:{CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR};'>{link}</a>")
+            # Use a clickable QLabel for the link
+            link_label = QLabel()
+            link_label.setText(f"<a href='{link}' style='color:{CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR};'>{link}</a>")
             link_label.setTextFormat(Qt.RichText)
-            link_label.setOpenExternalLinks(True)
+            link_label.setOpenExternalLinks(False)
+            # Connect click to open_link and update clicked_links
+            def handle_link_click(url=link):
+                import webbrowser
+                webbrowser.open(url)
+                if self.current_playlist_id:
+                    self.clicked_links.add(url)
+                    self.save_clicked_links()
+                    self.update_playlist_display_links()
+            link_label.linkActivated.connect(handle_link_click)
             info_layout.addWidget(link_label)
             row_layout.addWidget(info_widget)
 
@@ -578,17 +608,53 @@ class PlaylistSorterQt(QWidget):
         if not playlist_id:
             QMessageBox.critical(self, 'Error', 'Invalid playlist URL.')
             return
-        # Show status in widget-based layout
+        # Show loading animation and text in widget-based layout
         while self.result_layout.count():
             item = self.result_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-        status_label = QLabel('Fetching playlist...')
-        status_label.setStyleSheet('font-size:16px; color:#357ae8; margin:12px;')
-        self.result_layout.addWidget(status_label)
+        loading_frame = QFrame()
+        loading_layout = QVBoxLayout()
+        loading_layout.setAlignment(Qt.AlignCenter)
+        loading_frame.setLayout(loading_layout)
+        gif_label = QLabel()
+        gif_label.setAlignment(Qt.AlignCenter)
+        gif_label.setFixedSize(64, 64)
+        try:
+            from PyQt5.QtGui import QMovie
+            gif_path = os.path.join(os.path.dirname(__file__), 'loading.gif')
+            if os.path.exists(gif_path):
+                movie = QMovie(gif_path)
+                movie.setScaledSize(QSize(64, 64))
+                gif_label.setMovie(movie)
+                movie.start()
+            else:
+                gif_label.setText('⏳')
+                gif_label.setStyleSheet('font-size:48px;')
+        except Exception:
+            gif_label.setText('⏳')
+            gif_label.setStyleSheet('font-size:48px;')
+        loading_layout.addWidget(gif_label)
+        loading_text = QLabel('fetching...')
+        loading_text.setAlignment(Qt.AlignCenter)
+        loading_text.setStyleSheet('font-size:32px; color:#357ae8; margin-top:18px; font-weight:bold;')
+        loading_layout.addWidget(loading_text)
+        self.result_layout.addWidget(loading_frame)
         QApplication.processEvents()
-        videos, error = fetch_playlist_items(playlist_id)
+
+        # Start worker thread to fetch playlist
+        self.fetch_thread = FetchPlaylistWorker(playlist_id)
+        self.fetch_thread.finished.connect(lambda videos, error: self.on_fetch_complete(videos, error, url, playlist_id))
+        self.fetch_thread.start()
+
+    def on_fetch_complete(self, videos, error, url, playlist_id):
+        # Remove loading animation after fetch
+        while self.result_layout.count():
+            item = self.result_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
         if error:
             QMessageBox.critical(self, 'API Error', error)
             return
@@ -603,10 +669,9 @@ class PlaylistSorterQt(QWidget):
         playlist_name = None
         channel_name = None
         if videos:
-            playlist_name = videos[0].get('playlist_title', None)  # Not available in current API response
-            channel_name = videos[0].get('channel_title', None)    # Not available in current API response
+            playlist_name = videos[0].get('playlist_title', None)
+            channel_name = videos[0].get('channel_title', None)
         # Fallback: Try to get from API
-        # Get playlist details
         try:
             playlist_api = 'https://www.googleapis.com/youtube/v3/playlists'
             params = {
@@ -649,7 +714,6 @@ class PlaylistSorterQt(QWidget):
 
         # Show new videos info card if new videos found
         if new_vids_count is not None and new_vids_count > 0:
-            # Clear previous info
             for i in reversed(range(self.new_vids_layout.count())):
                 widget = self.new_vids_layout.itemAt(i).widget()
                 if widget:
@@ -662,7 +726,6 @@ class PlaylistSorterQt(QWidget):
             self.new_vids_card.setVisible(False)
         self.clicked_links = self.load_clicked_links(playlist_id)
         self.update_playlist_display_links()
-        # Save with updated video count and new vids count
         self.save_clicked_links(new_vids_count=new_vids_count)
 
     def load_playlist_to_sorter(self, playlist_link):
