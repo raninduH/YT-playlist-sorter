@@ -45,10 +45,14 @@ def fetch_playlist_items(playlist_id):
             video_id = snippet['resourceId']['videoId']
             title = snippet['title']
             added_at = snippet['publishedAt']
+            # Get thumbnail URL (prefer medium, fallback to default)
+            thumbnails = snippet.get('thumbnails', {})
+            thumb_url = thumbnails.get('medium', {}).get('url') or thumbnails.get('default', {}).get('url')
             videos.append({
                 'title': title,
                 'video_id': video_id,
-                'added_at': added_at
+                'added_at': added_at,
+                'thumbnail': thumb_url
             })
         nextPageToken = data.get('nextPageToken')
         if not nextPageToken:
@@ -112,12 +116,14 @@ class PlaylistSorterQt(QWidget):
         self.new_vids_card.setLayout(self.new_vids_layout)
         tab1_layout.addWidget(self.new_vids_card)
 
-        self.result_box = QTextBrowser()
-        self.result_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        tab1_layout.addWidget(self.result_box)
-
-        self.result_box.setOpenExternalLinks(False)
-        self.result_box.anchorClicked.connect(self.open_link)
+        # Widget-based video list for thumbnails
+        self.result_scroll = QScrollArea()
+        self.result_scroll.setWidgetResizable(True)
+        self.result_widget = QWidget()
+        self.result_layout = QVBoxLayout()
+        self.result_widget.setLayout(self.result_layout)
+        self.result_scroll.setWidget(self.result_widget)
+        tab1_layout.addWidget(self.result_scroll)
 
         tab1.setLayout(tab1_layout)
         self.tabs.addTab(tab1, "Sort Playlist")
@@ -396,15 +402,56 @@ class PlaylistSorterQt(QWidget):
         return set()
 
     def update_playlist_display_links(self):
-        # Re-render the playlist links with correct colors
+        # Clear previous widgets
+        while self.result_layout.count():
+            item = self.result_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
         if not hasattr(self, 'sorted_videos') or not self.sorted_videos:
             return
-        html = ''
         for v in self.sorted_videos:
+            row = QFrame()
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(4, 4, 4, 4)
+            row_layout.setSpacing(12)
+            row.setLayout(row_layout)
+
+            # Thumbnail
+            thumb_label = QLabel()
+            thumb_label.setFixedSize(90, 60)
+            thumb_label.setStyleSheet('border-radius:6px; background:#eee;')
+            thumb_url = v.get('thumbnail')
+            if thumb_url:
+                try:
+                    import requests
+                    from PyQt5.QtGui import QPixmap
+                    resp = requests.get(thumb_url, timeout=5)
+                    if resp.status_code == 200:
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(resp.content)
+                        thumb_label.setPixmap(pixmap.scaled(90, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                except Exception:
+                    pass
+            row_layout.addWidget(thumb_label)
+
+            # Info and link
+            info_widget = QWidget()
+            info_layout = QVBoxLayout()
+            info_layout.setContentsMargins(0, 0, 0, 0)
+            info_layout.setSpacing(2)
+            info_widget.setLayout(info_layout)
+            info_label = QLabel(f"<b>{v['added_at']}</b> - {v['title']}")
+            info_label.setTextFormat(Qt.RichText)
+            info_layout.addWidget(info_label)
             link = f"https://www.youtube.com/watch?v={v['video_id']}"
-            color = CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR
-            html += f"<b>{v['added_at']}</b> - {v['title']}<br><a href='{link}' style='color:{color};'>{link}</a><br><br>"
-        self.result_box.setHtml(html)
+            link_label = QLabel(f"<a href='{link}' style='color:{CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR};'>{link}</a>")
+            link_label.setTextFormat(Qt.RichText)
+            link_label.setOpenExternalLinks(True)
+            info_layout.addWidget(link_label)
+            row_layout.addWidget(info_widget)
+
+            self.result_layout.addWidget(row)
 
     def get_channel_id(self, url):
         # Accepts channel URL in the form https://www.youtube.com/channel/CHANNEL_ID or /@handle
@@ -531,7 +578,15 @@ class PlaylistSorterQt(QWidget):
         if not playlist_id:
             QMessageBox.critical(self, 'Error', 'Invalid playlist URL.')
             return
-        self.result_box.setText('Fetching playlist...')
+        # Show status in widget-based layout
+        while self.result_layout.count():
+            item = self.result_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        status_label = QLabel('Fetching playlist...')
+        status_label.setStyleSheet('font-size:16px; color:#357ae8; margin:12px;')
+        self.result_layout.addWidget(status_label)
         QApplication.processEvents()
         videos, error = fetch_playlist_items(playlist_id)
         if error:
