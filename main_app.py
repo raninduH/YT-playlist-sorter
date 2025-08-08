@@ -1,4 +1,3 @@
-
 import os
 import requests
 import json
@@ -154,6 +153,9 @@ class FetchPlaylistWorker(QThread):
         self.playlist_id = playlist_id
     def run(self):
         videos, error = fetch_playlist_items(self.playlist_id)
+        # Ensure videos is always a list for signal emit
+        if videos is None:
+            videos = []
         self.finished.emit(videos, error)
 
 class PlaylistSorterQt(QWidget):
@@ -598,6 +600,7 @@ class PlaylistSorterQt(QWidget):
                 print(f"[DEBUG] get_number_of_new_videos returned: new_vids={new_vids}, error={error}")
                 if error:
                     count_label.setText("Err")
+                    self.show_api_error_popup(error)
                 else:
                     count_label.setText(str(new_vids))
             check_btn.clicked.connect(on_check_clicked)
@@ -825,6 +828,25 @@ class PlaylistSorterQt(QWidget):
             return None
         return None
 
+    def show_api_error_popup(self, error_text):
+        instructions = (
+            "<b>API Error Detected</b><br><br>"
+            "<span style='color:#d32f2f;'>" + error_text + "</span><br><br>"
+            "<b>How to fix:</b><br>"
+            "1. Check that your Google API Key is correct and entered in the Configurations tab.<br>"
+            "2. If you see a quota error, visit <a href='https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas'>Google Cloud Console Quotas</a> to review your quota.<br>"
+            "3. Make sure your API key has access to YouTube Data API v3.<br>"
+            "4. If you recently created your API key, wait a few minutes and try again.<br>"
+            "5. You can update your API key in the Configurations tab.<br>"
+        )
+        msg = QMessageBox(self)
+        msg.setWindowTitle("API Error")
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(instructions)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+
     def list_channel_playlists(self):
         url = self.channel_entry.text().strip()
         channel_id = self.get_channel_id(url)
@@ -847,7 +869,7 @@ class PlaylistSorterQt(QWidget):
                 params['pageToken'] = nextPageToken
             resp = requests.get(base_url, params=params)
             if resp.status_code != 200:
-                self.channel_result_box.setText(f"API Error: {resp.text}")
+                self.show_api_error_popup(resp.text)
                 return
             data = resp.json()
             for item in data.get('items', []):
@@ -975,8 +997,20 @@ class PlaylistSorterQt(QWidget):
 
         # Start worker thread to fetch playlist
         self.fetch_thread = FetchPlaylistWorker(playlist_id)
-        self.fetch_thread.finished.connect(lambda videos, error: self.on_fetch_complete(videos, error, url, playlist_id))
+        self.fetch_thread.finished.connect(lambda videos, error: self.on_fetch_complete_with_error_popup(videos, error, url, playlist_id))
         self.fetch_thread.start()
+
+    def on_fetch_complete_with_error_popup(self, videos, error, url, playlist_id):
+        # Remove loading animation after fetch
+        while self.result_layout.count():
+            item = self.result_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        if error:
+            self.show_api_error_popup(error)
+            return
+        self.on_fetch_complete(videos, error, url, playlist_id)
 
     def on_fetch_complete(self, videos, error, url, playlist_id):
         # Remove loading animation after fetch
