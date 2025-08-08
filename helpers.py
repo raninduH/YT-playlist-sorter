@@ -33,6 +33,7 @@ def get_playlist_id(url):
 
 def fetch_playlist_items(playlist_id):
     videos = []
+    API_KEY = load_api_key()
     base_url = 'https://www.googleapis.com/youtube/v3/playlistItems'
     params = {
         'part': 'snippet',
@@ -67,8 +68,21 @@ def fetch_playlist_items(playlist_id):
             break
     return videos, None
 
-def sort_videos(videos, ascending=True):
-    return sorted(videos, key=lambda x: x['added_at'], reverse=not ascending)
+def sort_videos(videos, ascending=True, by_published=False):
+    """
+    Sorts videos by either 'added_at' or 'publishedAt' (if available).
+    If by_published is True, sorts by published time; else by added time.
+    """
+    if not videos:
+        return []
+    if by_published:
+        # Use 'publishedAt' if present, else fallback to 'added_at'
+        def get_published(x):
+            # Try 'publishedAt' in snippet, else fallback
+            return x.get('publishedAt') or x.get('added_at')
+        return sorted(videos, key=get_published, reverse=not ascending)
+    else:
+        return sorted(videos, key=lambda x: x['added_at'], reverse=not ascending)
 
 
 def get_number_of_new_videos(playlist_link):

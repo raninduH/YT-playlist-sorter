@@ -54,18 +54,102 @@ class PlaylistSorterQt(QWidget):
         tab1 = QWidget()
         tab1_layout = QVBoxLayout()
         self.url_label = QLabel('YouTube Playlist URL:')
+        self.url_label.setStyleSheet('font-size:16px; font-weight:bold; color:#222;')
         tab1_layout.addWidget(self.url_label)
         self.url_entry = QLineEdit()
+        self.url_entry.setMinimumWidth(900)
+        self.url_entry.setMaximumWidth(1200)
+        self.url_entry.setStyleSheet('font-size:16px; padding:8px 12px; border-radius:6px; border:1.5px solid #b3d8ff;')
         tab1_layout.addWidget(self.url_entry)
-        self.radio_group = QButtonGroup(self)
-        self.radio_asc = QRadioButton('Ascending - by added time')
-        self.radio_desc = QRadioButton('Descending - by added time')
-        self.radio_asc.setChecked(True)
-        self.radio_group.addButton(self.radio_asc)
-        self.radio_group.addButton(self.radio_desc)
-        tab1_layout.addWidget(self.radio_asc)
-        tab1_layout.addWidget(self.radio_desc)
+        # Redesigned sorting configuration layout: groups side by side
+        sort_config_card = QFrame()
+        sort_config_card.setStyleSheet('''
+            QFrame {
+                background: #f5f7fa;
+                border-radius: 8px;
+                margin: 2px 0px;
+                padding: 6px 10px;
+                border: 1px solid #e0e0e0;
+            }
+            QLabel {
+                font-size: 15px;
+                font-weight: bold;
+                color: #222;
+            }
+        ''')
+        sort_config_outer_layout = QHBoxLayout(sort_config_card)
+        sort_config_outer_layout.setSpacing(12)
+        sort_config_outer_layout.setContentsMargins(4, 2, 4, 2)
+
+        # Added time group (left)
+        added_time_group = QFrame()
+        added_time_group.setStyleSheet('QFrame { background: transparent; }')
+        added_time_layout = QVBoxLayout(added_time_group)
+        added_time_layout.setSpacing(2)
+        added_time_layout.setContentsMargins(2, 2, 2, 2)
+        added_time_group_label = QLabel('Sort by Added Time')
+        added_time_layout.addWidget(added_time_group_label)
+        added_time_radio_layout = QHBoxLayout()
+        added_time_radio_layout.setSpacing(2)
+        added_time_radio_layout.setContentsMargins(0, 0, 0, 0)
+        self.radio_added_asc = QRadioButton('Ascending')
+        self.radio_added_desc = QRadioButton('Descending')
+        added_time_radio_layout.addWidget(self.radio_added_asc)
+        added_time_radio_layout.addWidget(self.radio_added_desc)
+        added_time_layout.addLayout(added_time_radio_layout)
+        added_time_group.setLayout(added_time_layout)
+
+        # Published time group (right)
+        published_time_group = QFrame()
+        published_time_group.setStyleSheet('QFrame { background: transparent; }')
+        published_time_layout = QVBoxLayout(published_time_group)
+        published_time_layout.setSpacing(2)
+        published_time_layout.setContentsMargins(2, 2, 2, 2)
+        published_time_group_label = QLabel('Sort by Published Time')
+        published_time_layout.addWidget(published_time_group_label)
+        published_time_radio_layout = QHBoxLayout()
+        published_time_radio_layout.setSpacing(2)
+        published_time_radio_layout.setContentsMargins(0, 0, 0, 0)
+        self.radio_published_asc = QRadioButton('Ascending')
+        self.radio_published_desc = QRadioButton('Descending')
+        published_time_radio_layout.addWidget(self.radio_published_asc)
+        published_time_radio_layout.addWidget(self.radio_published_desc)
+        published_time_layout.addLayout(published_time_radio_layout)
+        published_time_group.setLayout(published_time_layout)
+
+        # Add both groups side by side
+        sort_config_outer_layout.addWidget(added_time_group)
+        sort_config_outer_layout.addWidget(published_time_group)
+
+        # Button groups for exclusivity
+        self.sort_radio_group = QButtonGroup(self)
+        self.sort_radio_group.setExclusive(True)
+        self.sort_radio_group.addButton(self.radio_added_asc)
+        self.sort_radio_group.addButton(self.radio_added_desc)
+        self.sort_radio_group.addButton(self.radio_published_asc)
+        self.sort_radio_group.addButton(self.radio_published_desc)
+        self.radio_added_asc.setChecked(True)
+
+        # Remove logic that disables other sorting options when one is chosen.
+        # QButtonGroup with setExclusive(True) already ensures only one can be selected at a time.
+
+        tab1_layout.addWidget(sort_config_card)
         self.sort_button = QPushButton('Sort Playlist')
+        self.sort_button.setFixedHeight(44)
+        self.sort_button.setStyleSheet('''
+            QPushButton {
+                background: #7fbfff;
+                color: white;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 19px;
+                border: none;
+                padding: 12px 0px;
+            }
+            QPushButton:hover {
+                background: #4f8cff;
+            }
+        ''')
         self.sort_button.clicked.connect(self.sort_playlist)
         tab1_layout.addWidget(self.sort_button)
         self.new_vids_card = QFrame()
@@ -99,10 +183,29 @@ class PlaylistSorterQt(QWidget):
         tab2 = QWidget()
         tab2_layout = QVBoxLayout()
         self.channel_label = QLabel('YouTube Channel URL:')
+        self.channel_label.setStyleSheet('font-size:16px; font-weight:bold; color:#222;')
         tab2_layout.addWidget(self.channel_label)
         self.channel_entry = QLineEdit()
+        self.channel_entry.setMinimumWidth(900)
+        self.channel_entry.setMaximumWidth(1200)
+        self.channel_entry.setStyleSheet('font-size:16px; padding:8px 12px; border-radius:6px; border:1.5px solid #b3d8ff;')
         tab2_layout.addWidget(self.channel_entry)
         self.channel_button = QPushButton('List Channel Playlists')
+        self.channel_button.setFixedHeight(44)
+        self.channel_button.setStyleSheet('''
+            QPushButton {
+                background: #7fbfff;
+                color: white;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 19px;
+                border: none;
+                padding: 12px 0px;
+            }
+            QPushButton:hover {
+                background: #4f8cff;
+            }
+        ''')
         self.channel_button.clicked.connect(self.list_channel_playlists)
         tab2_layout.addWidget(self.channel_button)
         self.channel_result_box = QTextBrowser()
@@ -898,20 +1001,26 @@ class PlaylistSorterQt(QWidget):
         if error:
             QMessageBox.critical(self, 'API Error', error)
             return
-        ascending = self.radio_asc.isChecked()
-        self.sorted_videos = sort_videos(videos, ascending)
+        # Determine sorting mode
+        if self.radio_added_asc.isChecked():
+            self.sorted_videos = sort_videos(videos, ascending=True, by_published=False)
+        elif self.radio_added_desc.isChecked():
+            self.sorted_videos = sort_videos(videos, ascending=False, by_published=False)
+        elif self.radio_published_asc.isChecked():
+            self.sorted_videos = sort_videos(videos, ascending=True, by_published=True)
+        elif self.radio_published_desc.isChecked():
+            self.sorted_videos = sort_videos(videos, ascending=False, by_published=True)
+        else:
+            self.sorted_videos = videos
         self.current_playlist_id = playlist_id
 
-        # Save the playlist link for later use
+        # ...existing code for saving playlist link, channel/playlist name, video count, etc...
         self.current_playlist_link = url
-
-        # Try to get playlist and channel name from first video snippet
         playlist_name = None
         channel_name = None
         if videos:
             playlist_name = videos[0].get('playlist_title', None)
             channel_name = videos[0].get('channel_title', None)
-        # Fallback: Try to get from API
         try:
             playlist_api = 'https://www.googleapis.com/youtube/v3/playlists'
             params = {
@@ -931,11 +1040,7 @@ class PlaylistSorterQt(QWidget):
             pass
         self.current_playlist_name = playlist_name
         self.current_channel_name = channel_name
-
-        # Save video count
         self.current_no_of_vids = len(videos)
-
-        # Load previous count for this playlist
         memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
         os.makedirs(memory_dir, exist_ok=True)
         json_path = os.path.join(memory_dir, f'{playlist_id}.json')
@@ -952,8 +1057,6 @@ class PlaylistSorterQt(QWidget):
             new_vids_count = self.current_no_of_vids - prev_count
             if new_vids_count < 0:
                 new_vids_count = 0
-
-        # Show new videos info card if new videos found
         if new_vids_count is not None and new_vids_count > 0:
             for i in reversed(range(self.new_vids_layout.count())):
                 widget = self.new_vids_layout.itemAt(i).widget()
