@@ -1,3 +1,4 @@
+
 import os
 import requests
 import json
@@ -64,7 +65,63 @@ def sort_videos(videos, ascending=True):
     return sorted(videos, key=lambda x: x['added_at'], reverse=not ascending)
 
 
-
+def get_number_of_new_videos(playlist_link):
+    """
+    Given a YouTube playlist link, fetches the current video count via API,
+    loads the relevant playlist JSON from the memory folder, compares counts,
+    and returns the number of new videos. Does not update the JSON.
+    Returns (number_of_new_videos, error_message) where error_message is None if successful.
+    """
+    API_KEY = os.getenv('GOOGLE_API_KEY')
+    playlist_id = get_playlist_id(playlist_link)
+    print(f"[DEBUG] Extracted playlist_id: {playlist_id}")
+    if not playlist_id:
+        print("[DEBUG] Invalid playlist link.")
+        return None, "Invalid playlist link."
+    # Fetch current video count from YouTube API
+    base_url = 'https://www.googleapis.com/youtube/v3/playlistItems'
+    params = {
+        'part': 'snippet',
+        'maxResults': 1,  # Need at least 1 to get totalResults
+        'playlistId': playlist_id,
+        'key': API_KEY
+    }
+    try:
+        resp = requests.get(base_url, params=params)
+        if resp.status_code != 200:
+            print(f"[DEBUG] API Error: {resp.text}")
+            return None, f"API Error: {resp.text}"
+        data = resp.json()
+        total = data.get('pageInfo', {}).get('totalResults', None)
+        print(f"[DEBUG] API returned totalResults: {total}")
+        if total is None:
+            print("[DEBUG] Could not retrieve video count.")
+            return None, "Could not retrieve video count."
+    except Exception as e:
+        print(f"[DEBUG] API Exception: {str(e)}")
+        return None, f"API Exception: {str(e)}"
+    # Load previous count from memory JSON
+    memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+    json_path = os.path.join(memory_dir, f'{playlist_id}.json')
+    stored_count = None
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                stored_count = data.get('no_of_vids', None)
+                print(f"[DEBUG] Loaded stored_count from JSON: {stored_count}")
+        except Exception as e:
+            print(f"[DEBUG] Error reading playlist JSON: {str(e)}")
+            return None, "Error reading playlist JSON."
+    else:
+        print("[DEBUG] JSON file does not exist.")
+    if stored_count is None:
+        print("[DEBUG] No stored video count found in JSON.")
+        return None, "No stored video count found in JSON."
+    new_vids = total - stored_count
+    if new_vids < 0:
+        new_vids = 0
+    return new_vids, None
 
 
 # Worker thread for fetching playlist items
@@ -277,6 +334,27 @@ class PlaylistSorterQt(QWidget):
             # Dynamic spacer 1
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
+            # New section: new vids count (hidden initially)
+            new_vids_widget = QWidget()
+            new_vids_widget.setFixedSize(60, 60)
+            new_vids_layout = QVBoxLayout()
+            new_vids_layout.setContentsMargins(0, 0, 0, 0)
+            new_vids_layout.setSpacing(0)
+            new_vids_count_label = QLabel("")
+            new_vids_count_label.setStyleSheet('font-size: 20px; font-weight: bold; color: #8d5524;')
+            new_vids_count_label.setAlignment(Qt.AlignCenter)
+            new_vids_label = QLabel("new vids")
+            new_vids_label.setStyleSheet('font-size: 12px; color: #8d5524;')
+            new_vids_label.setAlignment(Qt.AlignCenter)
+            new_vids_layout.addWidget(new_vids_count_label)
+            new_vids_layout.addWidget(new_vids_label)
+            new_vids_widget.setLayout(new_vids_layout)
+            new_vids_widget.setVisible(False)
+            main_layout.addWidget(new_vids_widget)
+
+            # Dynamic spacer 2
+            main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
             # Second section: Channel info
             ch_widget = QWidget()
             ch_widget.setFixedWidth(150)  # Fixed width for alignment
@@ -297,7 +375,7 @@ class PlaylistSorterQt(QWidget):
             ch_widget.setLayout(ch_layout)
             main_layout.addWidget(ch_widget)
 
-            # Dynamic spacer 2
+            # Dynamic spacer 3
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
             # Third section: Playlist info
@@ -324,7 +402,49 @@ class PlaylistSorterQt(QWidget):
             # Store for resize event
             self._viewed_cards.append((pl_widget, pl_name, pl_name_text))
 
-            # Dynamic spacer 3
+            # Dynamic spacer 4
+            main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+            # New brown check button
+            check_btn = QPushButton("check")
+            check_btn.setFixedSize(80, 30)
+            check_btn.setStyleSheet('''
+                QPushButton {
+                    background: #a0522d;
+                    color: #fff;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 15px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background: #c68642;
+                }
+            ''')
+
+            def on_check_clicked(checked=False, playlist_link=p.get('playlist_link', None),
+                                 count_label=new_vids_count_label,
+                                 widget=new_vids_widget):
+                
+                
+                if not playlist_link:
+                    print("[DEBUG] No playlist_link found in card data.")
+                    count_label.setText("N/A")
+                    widget.setVisible(True)
+                    return
+                count_label.setText("...")
+                widget.setVisible(True)
+                QApplication.processEvents()
+                new_vids, error = get_number_of_new_videos(playlist_link)
+                print(f"[DEBUG] get_number_of_new_videos returned: new_vids={new_vids}, error={error}")
+                if error:
+                    count_label.setText("Err")
+                else:
+                    count_label.setText(str(new_vids))
+            check_btn.clicked.connect(on_check_clicked)
+            main_layout.addWidget(check_btn)
+
+            # Dynamic spacer 5
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
             # Right section: Load button
