@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QRadioButton, QButtonGroup, QMessageBox, QSizePolicy, QTabWidget,
-    QScrollArea, QHBoxLayout, QFrame
+    QScrollArea, QHBoxLayout, QFrame, QGridLayout, QSpacerItem
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor
@@ -81,7 +81,12 @@ class PlaylistSorterQt(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('YouTube Playlist Sorter (PyQt5)')
+        # Set window title and icon
+        self.setWindowTitle('YT Playlist Sorter')
+        from PyQt5.QtGui import QIcon
+        logo_path = os.path.join(os.path.dirname(__file__), 'logo', 'logo.png')
+        if os.path.exists(logo_path):
+            self.setWindowIcon(QIcon(logo_path))
         self.setGeometry(100, 100, 800, 600)
         main_layout = QVBoxLayout()
 
@@ -224,10 +229,12 @@ class PlaylistSorterQt(QWidget):
             elided = fm.elidedText(text, Qt.ElideRight, max_width)
             label.setText(elided)
         
+        # Make cards start from the top
+        self.viewed_layout.setAlignment(Qt.AlignTop)
         for p in playlists:
             card = QFrame()
             card.setFrameShape(QFrame.StyledPanel)
-            card.setFixedHeight(80)  # Reduced height for better fit
+            card.setFixedHeight(80)
             card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             card.setStyleSheet('''
                 QFrame {
@@ -243,86 +250,78 @@ class PlaylistSorterQt(QWidget):
                     padding: 0px;
                 }
             ''')
-            
-            # Main horizontal layout
+
+
             main_layout = QHBoxLayout()
             main_layout.setContentsMargins(0, 0, 0, 0)
-            main_layout.setSpacing(12)
-            
-            # Left section: Video count (compact)
+            main_layout.setSpacing(0)
+
+            # Left section: Video count
             vid_count_widget = QWidget()
             vid_count_widget.setFixedSize(60, 60)
             vid_count_layout = QVBoxLayout()
             vid_count_layout.setContentsMargins(0, 0, 0, 0)
             vid_count_layout.setSpacing(0)
-            
             vid_count = QLabel(str(p.get('no_of_vids', 'N/A')))
             vid_count.setStyleSheet('font-size: 20px; font-weight: bold; color: #222;')
             vid_count.setAlignment(Qt.AlignCenter)
-            
             vid_label = QLabel("videos")
             vid_label.setStyleSheet('font-size: 12px; color: #888;')
             vid_label.setAlignment(Qt.AlignCenter)
-            
             vid_count_layout.addWidget(vid_count)
             vid_count_layout.addWidget(vid_label)
             vid_count_widget.setLayout(vid_count_layout)
             main_layout.addWidget(vid_count_widget)
             
-            # Center section: Channel and playlist info
-            info_widget = QWidget()
-            info_layout = QHBoxLayout()  # Changed to horizontal layout
-            info_layout.setContentsMargins(0, 0, 0, 0)
-            info_layout.setSpacing(0)  # Remove spacing, use stretch instead
-            
-            # Channel section
-            ch_section = QWidget()
+            # Dynamic spacer 1
+            main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+            # Second section: Channel info
+            ch_widget = QWidget()
+            ch_widget.setFixedWidth(150)  # Fixed width for alignment
             ch_layout = QVBoxLayout()
             ch_layout.setContentsMargins(0, 0, 0, 0)
-            ch_layout.setSpacing(1)
-            
+            ch_layout.setSpacing(0)
             ch_label = QLabel("channel name")
             ch_label.setStyleSheet('font-size: 11px; color: #888; margin: 0px;')
             ch_label.setAlignment(Qt.AlignLeft)
-            
-            ch_name = QLabel(p.get('channel_name', 'Unknown Channel'))
+            ch_name_text = p.get('channel_name', 'Unknown Channel')
+            ch_name = QLabel(ch_name_text)
             ch_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')
             ch_name.setAlignment(Qt.AlignLeft)
-            elide_label(ch_name, 120)  # Reduced width for side-by-side layout
-            
+            elide_label(ch_name, 140)
+            ch_name.setToolTip(ch_name_text)
             ch_layout.addWidget(ch_label)
             ch_layout.addWidget(ch_name)
-            ch_layout.addStretch()
-            ch_section.setLayout(ch_layout)
+            ch_widget.setLayout(ch_layout)
+            main_layout.addWidget(ch_widget)
             
-            # Playlist section
-            pl_section = QWidget()
+            # Dynamic spacer 2
+            main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+            # Third section: Playlist info
+            pl_widget = QWidget()
+            pl_widget.setFixedWidth(150)  # Fixed width for alignment
             pl_layout = QVBoxLayout()
             pl_layout.setContentsMargins(0, 0, 0, 0)
-            pl_layout.setSpacing(1)
-            
+            pl_layout.setSpacing(0)
             pl_label = QLabel("playlist name")
-            pl_label.setStyleSheet('font-size: 11px; color: #888; margin: 0px;')  # Same size as channel label
+            pl_label.setStyleSheet('font-size: 11px; color: #888; margin: 0px;')
             pl_label.setAlignment(Qt.AlignLeft)
-            
-            pl_name = QLabel(p.get('playlist_name', 'Unknown Playlist'))
-            pl_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')  # Same size as channel name
+            pl_name_text = p.get('playlist_name', 'Unknown Playlist')
+            pl_name = QLabel(pl_name_text)
+            pl_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')
             pl_name.setAlignment(Qt.AlignLeft)
-            elide_label(pl_name, 120)  # Reduced width for side-by-side layout
-            
+            elide_label(pl_name, 140)
+            pl_name.setToolTip(pl_name_text)
             pl_layout.addWidget(pl_label)
             pl_layout.addWidget(pl_name)
-            pl_layout.addStretch()
-            pl_section.setLayout(pl_layout)
+            pl_widget.setLayout(pl_layout)
+            main_layout.addWidget(pl_widget)
             
-            info_layout.addStretch(1)  # Add stretch before channel
-            info_layout.addWidget(ch_section)
-            info_layout.addStretch(1)  # Larger stretch between channel and playlist
-            info_layout.addWidget(pl_section)
-            info_layout.addStretch(1)  # Add stretch after playlist
-            info_widget.setLayout(info_layout)
-            main_layout.addWidget(info_widget)
-            
+            # Dynamic spacer 3
+            main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
             # Right section: Load button
             btn = QPushButton("Load to sorter")
             btn.setFixedSize(120, 30)
@@ -342,14 +341,14 @@ class PlaylistSorterQt(QWidget):
             playlist_link = p.get('playlist_link', None)
             btn.clicked.connect(lambda checked, link=playlist_link: self.load_playlist_to_sorter(link))
             main_layout.addWidget(btn)
-            
+
             card.setLayout(main_layout)
             self.viewed_layout.addWidget(card)
 
     def open_link(self, url):
         import webbrowser
         webbrowser.open(url.toString())
-        # Mark link as clicked and update display
+        spacer = QSpacerItem(80, 10, QSizePolicy.Expanding, QSizePolicy.Minimum)
         if self.current_playlist_id:
             video_url = url.toString()
             self.clicked_links.add(video_url)
@@ -638,7 +637,7 @@ class PlaylistSorterQt(QWidget):
         loading_layout.addWidget(gif_label)
         loading_text = QLabel('fetching...')
         loading_text.setAlignment(Qt.AlignCenter)
-        loading_text.setStyleSheet('font-size:32px; color:#357ae8; margin-top:18px; font-weight:bold;')
+        loading_text.setStyleSheet('font-size:32px; color:#04044b; margin-top:18px; font-weight:bold;')
         loading_layout.addWidget(loading_text)
         self.result_layout.addWidget(loading_frame)
         QApplication.processEvents()
@@ -729,8 +728,15 @@ class PlaylistSorterQt(QWidget):
         self.save_clicked_links(new_vids_count=new_vids_count)
 
     def load_playlist_to_sorter(self, playlist_link):
-        # Switch to Sort Playlist tab and set the playlist link
+        # Switch to Sort Playlist tab
         self.tabs.setCurrentIndex(0)
+        # Clear previous results in Sort Playlist tab
+        while self.result_layout.count():
+            item = self.result_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        # Load the relevant link to the input
         self.url_entry.setText(playlist_link if playlist_link else "")
 
 if __name__ == '__main__':
