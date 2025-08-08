@@ -92,6 +92,25 @@ class PlaylistSorterQt(QWidget):
         self.sort_button = QPushButton('Sort Playlist')
         self.sort_button.clicked.connect(self.sort_playlist)
         tab1_layout.addWidget(self.sort_button)
+        # Modern info card for new videos
+        self.new_vids_card = QFrame()
+        self.new_vids_card.setVisible(False)
+        self.new_vids_card.setStyleSheet('''
+            /* Outer QFrame styling removed to keep only inner QLabel rectangle */
+            QLabel {
+                color: #357ae8;
+                font-size: 16px;
+                font-weight: bold;
+                background: #eaf6ff;
+                border-radius: 8px;
+                padding: 12px 18px;
+                margin: 8px 0px;
+                border: 1px solid #b3d8ff;
+            }
+        ''')
+        self.new_vids_layout = QVBoxLayout()
+        self.new_vids_card.setLayout(self.new_vids_layout)
+        tab1_layout.addWidget(self.new_vids_card)
 
         self.result_box = QTextBrowser()
         self.result_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -515,6 +534,19 @@ class PlaylistSorterQt(QWidget):
             if new_vids_count < 0:
                 new_vids_count = 0
 
+        # Show new videos info card if new videos found
+        if new_vids_count is not None and new_vids_count > 0:
+            # Clear previous info
+            for i in reversed(range(self.new_vids_layout.count())):
+                widget = self.new_vids_layout.itemAt(i).widget()
+                if widget:
+                    widget.setParent(None)
+            info_label = QLabel(f"{new_vids_count} new video{'s' if new_vids_count > 1 else ''} found since last retrieval!")
+            info_label.setAlignment(Qt.AlignCenter)
+            self.new_vids_layout.addWidget(info_label)
+            self.new_vids_card.setVisible(True)
+        else:
+            self.new_vids_card.setVisible(False)
         self.clicked_links = self.load_clicked_links(playlist_id)
         self.update_playlist_display_links()
         # Save with updated video count and new vids count
