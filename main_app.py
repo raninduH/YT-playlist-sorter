@@ -222,15 +222,17 @@ class PlaylistSorterQt(QWidget):
                     playlists.append(data)
             except Exception:
                 continue
-        
-        def elide_label(label, max_width):
-            fm = QFontMetrics(label.font())
-            text = label.text()
-            elided = fm.elidedText(text, Qt.ElideRight, max_width)
-            label.setText(elided)
-        
+
         # Make cards start from the top
         self.viewed_layout.setAlignment(Qt.AlignTop)
+        # Get available width for playlist name eliding
+
+        def elide_label(label, full_text, max_width):
+            fm = QFontMetrics(label.font())
+            elided = fm.elidedText(full_text, Qt.ElideRight, max_width)
+            label.setText(elided)
+
+        self._viewed_cards = []  # Store card/pl_name for resize event
         for p in playlists:
             card = QFrame()
             card.setFrameShape(QFrame.StyledPanel)
@@ -250,7 +252,6 @@ class PlaylistSorterQt(QWidget):
                     padding: 0px;
                 }
             ''')
-
 
             main_layout = QHBoxLayout()
             main_layout.setContentsMargins(0, 0, 0, 0)
@@ -272,7 +273,7 @@ class PlaylistSorterQt(QWidget):
             vid_count_layout.addWidget(vid_label)
             vid_count_widget.setLayout(vid_count_layout)
             main_layout.addWidget(vid_count_widget)
-            
+
             # Dynamic spacer 1
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
@@ -289,13 +290,13 @@ class PlaylistSorterQt(QWidget):
             ch_name = QLabel(ch_name_text)
             ch_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')
             ch_name.setAlignment(Qt.AlignLeft)
-            elide_label(ch_name, 140)
+            elide_label(ch_name, ch_name_text, 140)
             ch_name.setToolTip(ch_name_text)
             ch_layout.addWidget(ch_label)
             ch_layout.addWidget(ch_name)
             ch_widget.setLayout(ch_layout)
             main_layout.addWidget(ch_widget)
-            
+
             # Dynamic spacer 2
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
@@ -312,13 +313,17 @@ class PlaylistSorterQt(QWidget):
             pl_name = QLabel(pl_name_text)
             pl_name.setStyleSheet('font-size: 17px; font-weight: bold; color: #222; margin: 0px;')
             pl_name.setAlignment(Qt.AlignLeft)
-            elide_label(pl_name, 140)
+            # Elide based on available width (initial, will update on resize)
+            elide_label(pl_name, pl_name_text, 140)
             pl_name.setToolTip(pl_name_text)
             pl_layout.addWidget(pl_label)
             pl_layout.addWidget(pl_name)
             pl_widget.setLayout(pl_layout)
             main_layout.addWidget(pl_widget)
-            
+
+            # Store for resize event
+            self._viewed_cards.append((pl_widget, pl_name, pl_name_text))
+
             # Dynamic spacer 3
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
@@ -344,6 +349,18 @@ class PlaylistSorterQt(QWidget):
 
             card.setLayout(main_layout)
             self.viewed_layout.addWidget(card)
+
+        # Update eliding on resize using actual label width
+        def update_eliding():
+            for pl_widget, pl_name, pl_name_text in getattr(self, '_viewed_cards', []):
+                # Use the actual width of the label, fallback to 140 if not available
+                w = pl_name.width() if pl_name.width() > 10 else 140
+                elide_label(pl_name, pl_name_text, w)
+
+        def viewed_container_resize_event(event):
+            QWidget.resizeEvent(self.viewed_container, event)
+            update_eliding()
+        self.viewed_container.resizeEvent = viewed_container_resize_event
 
     def open_link(self, url):
         import webbrowser
