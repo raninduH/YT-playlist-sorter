@@ -144,7 +144,7 @@ class PlaylistSorterQt(QWidget):
         logo_path = os.path.join(os.path.dirname(__file__), 'logo', 'logo.png')
         if os.path.exists(logo_path):
             self.setWindowIcon(QIcon(logo_path))
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1200, 800)
         main_layout = QVBoxLayout()
 
         self.tabs = QTabWidget()
