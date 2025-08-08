@@ -17,8 +17,28 @@ from config import CLICKED_LINK_COLOR, UNCLICKED_LINK_COLOR
 from PyQt5.QtCore import QSize
 from PyQt5.QtGui import QFontMetrics
 
-load_dotenv()
-API_KEY = os.getenv('GOOGLE_API_KEY')
+def get_config_path():
+    config_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter')
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, 'config.json')
+
+def save_api_key(api_key):
+    config_path = get_config_path()
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump({'GOOGLE_API_KEY': api_key}, f)
+
+def load_api_key():
+    config_path = get_config_path()
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                return config.get('GOOGLE_API_KEY')
+        except Exception:
+            return None
+    return None
+
+API_KEY = load_api_key()
 
 def get_playlist_id(url):
     if 'list=' in url:
@@ -101,7 +121,9 @@ def get_number_of_new_videos(playlist_link):
         print(f"[DEBUG] API Exception: {str(e)}")
         return None, f"API Exception: {str(e)}"
     # Load previous count from memory JSON
-    memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+    # memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+    memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
+    os.makedirs(memory_dir, exist_ok=True)
     json_path = os.path.join(memory_dir, f'{playlist_id}.json')
     stored_count = None
     if os.path.exists(json_path):
@@ -136,9 +158,9 @@ class FetchPlaylistWorker(QThread):
 
 class PlaylistSorterQt(QWidget):
 
+
     def __init__(self):
         super().__init__()
-        # Set window title and icon
         self.setWindowTitle('YT Playlist Sorter')
         from PyQt5.QtGui import QIcon
         logo_path = os.path.join(os.path.dirname(__file__), 'logo', 'logo.png')
@@ -153,12 +175,10 @@ class PlaylistSorterQt(QWidget):
         # Tab 1: Playlist Sorter
         tab1 = QWidget()
         tab1_layout = QVBoxLayout()
-
         self.url_label = QLabel('YouTube Playlist URL:')
         tab1_layout.addWidget(self.url_label)
         self.url_entry = QLineEdit()
         tab1_layout.addWidget(self.url_entry)
-
         self.radio_group = QButtonGroup(self)
         self.radio_asc = QRadioButton('Ascending')
         self.radio_desc = QRadioButton('Descending')
@@ -167,15 +187,12 @@ class PlaylistSorterQt(QWidget):
         self.radio_group.addButton(self.radio_desc)
         tab1_layout.addWidget(self.radio_asc)
         tab1_layout.addWidget(self.radio_desc)
-
         self.sort_button = QPushButton('Sort Playlist')
         self.sort_button.clicked.connect(self.sort_playlist)
         tab1_layout.addWidget(self.sort_button)
-        # Modern info card for new videos
         self.new_vids_card = QFrame()
         self.new_vids_card.setVisible(False)
         self.new_vids_card.setStyleSheet('''
-            /* Outer QFrame styling removed to keep only inner QLabel rectangle */
             QLabel {
                 color: #357ae8;
                 font-size: 16px;
@@ -190,8 +207,6 @@ class PlaylistSorterQt(QWidget):
         self.new_vids_layout = QVBoxLayout()
         self.new_vids_card.setLayout(self.new_vids_layout)
         tab1_layout.addWidget(self.new_vids_card)
-
-        # Widget-based video list for thumbnails
         self.result_scroll = QScrollArea()
         self.result_scroll.setWidgetResizable(True)
         self.result_widget = QWidget()
@@ -199,38 +214,30 @@ class PlaylistSorterQt(QWidget):
         self.result_widget.setLayout(self.result_layout)
         self.result_scroll.setWidget(self.result_widget)
         tab1_layout.addWidget(self.result_scroll)
-
         tab1.setLayout(tab1_layout)
         self.tabs.addTab(tab1, "Sort Playlist")
 
         # Tab 2: Channel Playlists
         tab2 = QWidget()
         tab2_layout = QVBoxLayout()
-
         self.channel_label = QLabel('YouTube Channel URL:')
         tab2_layout.addWidget(self.channel_label)
         self.channel_entry = QLineEdit()
         tab2_layout.addWidget(self.channel_entry)
-
         self.channel_button = QPushButton('List Channel Playlists')
         self.channel_button.clicked.connect(self.list_channel_playlists)
         tab2_layout.addWidget(self.channel_button)
-
         self.channel_result_box = QTextBrowser()
         self.channel_result_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         tab2_layout.addWidget(self.channel_result_box)
-
         self.channel_result_box.setOpenExternalLinks(False)
         self.channel_result_box.anchorClicked.connect(self.open_link)
-
         tab2.setLayout(tab2_layout)
         self.tabs.addTab(tab2, "Channel Playlists")
 
         # Tab 3: Viewed Playlists
         tab3 = QWidget()
         tab3_layout = QVBoxLayout()
-
-        # All required PyQt5 widgets are already imported at the top
         self.viewed_scroll = QScrollArea()
         self.viewed_scroll.setWidgetResizable(True)
         self.viewed_container = QWidget()
@@ -238,9 +245,123 @@ class PlaylistSorterQt(QWidget):
         self.viewed_container.setLayout(self.viewed_layout)
         self.viewed_scroll.setWidget(self.viewed_container)
         tab3_layout.addWidget(self.viewed_scroll)
-
         tab3.setLayout(tab3_layout)
         self.tabs.addTab(tab3, "Viewed Playlists")
+
+        # Tab 4: Configurations (Professional Layout)
+        tab4 = QWidget()
+        tab4_outer_layout = QVBoxLayout(tab4)
+        tab4_outer_layout.setContentsMargins(0, 0, 0, 0)
+        tab4_outer_layout.setSpacing(0)
+
+        # Center everything using a QHBoxLayout
+        center_layout = QHBoxLayout()
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        tab4_outer_layout.addLayout(center_layout)
+
+        # Card-style widget for config content
+        card = QFrame()
+        card.setStyleSheet('''
+            QFrame {
+                background: #fff;
+                border-radius: 16px;
+                margin: 0px;
+                padding: 0px;
+            }
+        ''')
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(48, 32, 48, 32)
+        card_layout.setSpacing(24)
+
+        # Title
+        self.api_key_label = QLabel("Google API Key Configuration")
+        self.api_key_label.setStyleSheet('font-size:28px; font-weight:700; color:#111; margin-bottom:8px;')
+        self.api_key_label.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(self.api_key_label)
+
+        # Subtitle
+        subtitle = QLabel("Enter your Google API Key below to unlock all features.")
+        subtitle.setStyleSheet('font-size:16px; color:#444; margin-bottom:12px;')
+        subtitle.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(subtitle)
+
+        # Input row
+        input_row = QHBoxLayout()
+        input_row.setSpacing(12)
+        input_row.setAlignment(Qt.AlignCenter)
+        self.api_key_entry = QLineEdit()
+        self.api_key_entry.setPlaceholderText("Paste your Google API Key here")
+        self.api_key_entry.setMinimumWidth(350)
+        self.api_key_entry.setMaximumWidth(500)
+        self.api_key_entry.setStyleSheet('font-size:18px; padding:8px 12px; border-radius:6px; border:1.5px solid #b3d8ff;')
+        input_row.addWidget(self.api_key_entry)
+        self.api_key_save_btn = QPushButton("Save API Key")
+        self.api_key_save_btn.setMinimumWidth(140)
+        self.api_key_save_btn.setStyleSheet('''
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f8cff, stop:1 #357ae8);
+                color: white;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 18px;
+                border: none;
+                padding: 10px 0px;
+            }
+            QPushButton:hover {
+                background: #357ae8;
+            }
+        ''')
+        input_row.addWidget(self.api_key_save_btn)
+        card_layout.addLayout(input_row)
+
+        # Status/Error message
+        self.api_key_status = QLabel("")
+        self.api_key_status.setStyleSheet('font-size:16px; color:#d32f2f; margin-bottom:8px;')
+        self.api_key_status.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(self.api_key_status)
+
+        # Instructions box
+        instructions_box = QFrame()
+        instructions_box.setStyleSheet('''
+            QFrame {
+                background: #eaf6ff;
+                border-radius: 12px;
+                margin-top: 8px;
+            }
+        ''')
+        instructions_layout = QVBoxLayout(instructions_box)
+        instructions_layout.setContentsMargins(24, 18, 24, 18)
+        instructions_layout.setSpacing(8)
+        instructions = (
+            "<div style='font-size:18px; font-weight:600; color:#111; margin-bottom:8px;'>How to get a Google API Key for YouTube Data API v3:</div>"
+            "<ol style='font-size:15px; color:#222; margin-left:18px;'>"
+            "<li>Go to the <a href='https://console.cloud.google.com/' style='color:#357ae8;'>Google Cloud Console</a>.</li>"
+            "<li>Create a new project (or select an existing one).</li>"
+            "<li>In the left sidebar, go to <b>APIs & Services &gt; Library</b>.</li>"
+            "<li>Search for 'YouTube Data API v3' and click <b>Enable</b>.</li>"
+            "<li>Go to <b>APIs & Services &gt; Credentials</b>.</li>"
+            "<li>Click <b>Create Credentials &gt; API key</b>.</li>"
+            "<li>Copy your API key and paste it above.</li>"
+            "</ol>"
+            "<div style='font-size:14px; color:#d32f2f; margin-top:8px;'><i>If you see API errors, check your API key and quota.</i></div>"
+        )
+        instructions_label = QLabel()
+        instructions_label.setTextFormat(Qt.RichText)
+        instructions_label.setText(instructions)
+        instructions_label.setWordWrap(True)
+        instructions_layout.addWidget(instructions_label)
+        card_layout.addWidget(instructions_box)
+
+        # Add stretch to fill vertical space
+        card_layout.addStretch(1)
+
+        # Center card in window
+        center_layout.addStretch(1)
+        center_layout.addWidget(card, alignment=Qt.AlignCenter)
+        center_layout.addStretch(1)
+
+        self.tabs.addTab(tab4, "Configurations")
 
         self.setLayout(main_layout)
 
@@ -248,11 +369,30 @@ class PlaylistSorterQt(QWidget):
         self.current_playlist_id = None
         self.clicked_links = set()
 
+        # Load API key from config
+        self.api_key_entry.setText(load_api_key() or "")
+        self.api_key_save_btn.clicked.connect(self.save_api_key_from_ui)
+
         # Load viewed playlists
         self.load_viewed_playlists()
 
         # Connect tab change to refresh viewed playlists
         self.tabs.currentChanged.connect(self.on_tab_changed)
+
+        # If no API key, go to Configurations tab and show error
+        if not load_api_key():
+            self.tabs.setCurrentIndex(3)  # Configurations tab
+            self.api_key_status.setText("<b style='color:#d32f2f;'>Enter Google API Key to unlock the features of this app.</b>")
+
+    def save_api_key_from_ui(self):
+        key = self.api_key_entry.text().strip()
+        if not key:
+            self.api_key_status.setText("<b style='color:#d32f2f;'>API Key cannot be empty.</b>")
+            return
+        save_api_key(key)
+        global API_KEY
+        API_KEY = key
+        self.api_key_status.setText("<b style='color:#388e3c;'>API Key saved! You can now use all features.</b>")
 
     def on_tab_changed(self, idx):
         # If viewed playlists tab is selected, refresh
@@ -267,7 +407,8 @@ class PlaylistSorterQt(QWidget):
             if widget:
                 widget.deleteLater()
         # Scan memory folder for playlist JSONs
-        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
+        os.makedirs(memory_dir, exist_ok=True)
         if not os.path.exists(memory_dir):
             return
         files = [f for f in os.listdir(memory_dir) if f.endswith('.json')]
@@ -522,7 +663,7 @@ class PlaylistSorterQt(QWidget):
     def save_clicked_links(self, new_vids_count=None):
         if not self.current_playlist_id:
             return
-        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
         os.makedirs(memory_dir, exist_ok=True)
         json_path = os.path.join(memory_dir, f'{self.current_playlist_id}.json')
 
@@ -560,7 +701,8 @@ class PlaylistSorterQt(QWidget):
             json.dump(data, f)
 
     def load_clicked_links(self, playlist_id):
-        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
+        os.makedirs(memory_dir, exist_ok=True)
         json_path = os.path.join(memory_dir, f'{playlist_id}.json')
         if os.path.exists(json_path):
             try:
@@ -884,7 +1026,8 @@ class PlaylistSorterQt(QWidget):
         self.current_no_of_vids = len(videos)
 
         # Load previous count for this playlist
-        memory_dir = os.path.join(os.path.dirname(__file__), 'memory')
+        memory_dir = os.path.join(os.environ['APPDATA'], 'YT-playlist-sorter', 'memory')
+        os.makedirs(memory_dir, exist_ok=True)
         json_path = os.path.join(memory_dir, f'{playlist_id}.json')
         prev_count = None
         if os.path.exists(json_path):
