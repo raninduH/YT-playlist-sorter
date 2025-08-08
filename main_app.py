@@ -280,6 +280,25 @@ class PlaylistSorterQt(QWidget):
             except Exception:
                 continue
 
+        # Add 'check all' button at the top
+        check_all_btn = QPushButton("check all")
+        check_all_btn.setFixedSize(100, 32)
+        check_all_btn.setStyleSheet('''
+            QPushButton {
+                background: #f5e6da;
+                color: #8d5524;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 16px;
+                border: none;
+                margin-bottom: 8px;
+            }
+            QPushButton:hover {
+                background: #ecd3b6;
+            }
+        ''')
+        self.viewed_layout.addWidget(check_all_btn)
+
         # Make cards start from the top
         self.viewed_layout.setAlignment(Qt.AlignTop)
         # Get available width for playlist name eliding
@@ -290,6 +309,7 @@ class PlaylistSorterQt(QWidget):
             label.setText(elided)
 
         self._viewed_cards = []  # Store card/pl_name for resize event
+        self._check_btns = []    # Store check buttons for 'check all'
         for p in playlists:
             card = QFrame()
             card.setFrameShape(QFrame.StyledPanel)
@@ -425,8 +445,6 @@ class PlaylistSorterQt(QWidget):
             def on_check_clicked(checked=False, playlist_link=p.get('playlist_link', None),
                                  count_label=new_vids_count_label,
                                  widget=new_vids_widget):
-                
-                
                 if not playlist_link:
                     print("[DEBUG] No playlist_link found in card data.")
                     count_label.setText("N/A")
@@ -443,6 +461,7 @@ class PlaylistSorterQt(QWidget):
                     count_label.setText(str(new_vids))
             check_btn.clicked.connect(on_check_clicked)
             main_layout.addWidget(check_btn)
+            self._check_btns.append(check_btn)
 
             # Dynamic spacer 5
             main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
@@ -469,6 +488,11 @@ class PlaylistSorterQt(QWidget):
 
             card.setLayout(main_layout)
             self.viewed_layout.addWidget(card)
+        # Connect 'check all' button to trigger all check buttons
+        def trigger_all_checks():
+            for btn in self._check_btns:
+                btn.click()
+        check_all_btn.clicked.connect(trigger_all_checks)
 
         # Update eliding on resize using actual label width
         def update_eliding():
