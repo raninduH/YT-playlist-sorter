@@ -39,7 +39,7 @@ class PlaylistSorterQt(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('YT Playlist Sorter')
+        self.setWindowTitle('YT Playlist Sorter & Tracker')
         from PyQt5.QtGui import QIcon
         logo_path = os.path.join(os.path.dirname(__file__), 'logo', 'logo.png')
         if os.path.exists(logo_path):
@@ -58,8 +58,8 @@ class PlaylistSorterQt(QWidget):
         self.url_entry = QLineEdit()
         tab1_layout.addWidget(self.url_entry)
         self.radio_group = QButtonGroup(self)
-        self.radio_asc = QRadioButton('Ascending')
-        self.radio_desc = QRadioButton('Descending')
+        self.radio_asc = QRadioButton('Ascending - by added time')
+        self.radio_desc = QRadioButton('Descending - by added time')
         self.radio_asc.setChecked(True)
         self.radio_group.addButton(self.radio_asc)
         self.radio_group.addButton(self.radio_desc)
