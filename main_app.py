@@ -422,16 +422,32 @@ class PlaylistSorterQt(QWidget):
                 widget.deleteLater()
         if not hasattr(self, 'sorted_videos') or not self.sorted_videos:
             return
+        # Get the width of the scroll area for responsive layout
+        scroll_width = self.result_scroll.viewport().width() if self.result_scroll else 800
+        card_width = scroll_width - 24  # account for margins/padding
+        thumb_w = int(card_width * 0.4)
+        info_w = int(card_width * 0.6)
+        thumb_h = int(thumb_w * 9 / 16)  # 16:9 aspect ratio
         for v in self.sorted_videos:
-            row = QFrame()
-            row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(4, 4, 4, 4)
-            row_layout.setSpacing(12)
-            row.setLayout(row_layout)
+            card = QFrame()
+            card.setFrameShape(QFrame.StyledPanel)
+            card.setStyleSheet('''
+                QFrame {
+                    background: #fafbfc;
+                    border-radius: 8px;
+                    margin: 8px 0px;
+                    padding: 8px;
+                    border: 1px solid #d0d0d0;
+                }
+            ''')
+            card_layout = QHBoxLayout()
+            card_layout.setContentsMargins(8, 8, 8, 8)
+            card_layout.setSpacing(16)
+            card.setLayout(card_layout)
 
-            # Thumbnail
+            # Thumbnail section (40% width)
             thumb_label = QLabel()
-            thumb_label.setFixedSize(90, 60)
+            thumb_label.setFixedSize(thumb_w, thumb_h)
             thumb_label.setStyleSheet('border-radius:6px; background:#eee;')
             thumb_url = v.get('thumbnail')
             if thumb_url:
@@ -442,33 +458,34 @@ class PlaylistSorterQt(QWidget):
                     if resp.status_code == 200:
                         pixmap = QPixmap()
                         pixmap.loadFromData(resp.content)
-                        thumb_label.setPixmap(pixmap.scaled(90, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                        thumb_label.setPixmap(pixmap.scaled(thumb_w, thumb_h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 except Exception:
                     pass
-            row_layout.addWidget(thumb_label)
+            card_layout.addWidget(thumb_label, 2)
 
-            # Info and link
+            # Info layout (60% width)
             info_widget = QWidget()
+            info_widget.setFixedWidth(info_w)
             info_layout = QVBoxLayout()
             info_layout.setContentsMargins(0, 0, 0, 0)
-            info_layout.setSpacing(2)
+            info_layout.setSpacing(6)
             info_widget.setLayout(info_layout)
             # Date/time
             dt_label = QLabel(f"{v['added_at']}")
             dt_label.setTextFormat(Qt.RichText)
+            dt_label.setStyleSheet('font-size:13px; color:#666; border:none;')
             info_layout.addWidget(dt_label)
             # Title
             title_label = QLabel(v['title'])
-            title_label.setStyleSheet('font-size:15px; font-weight:bold; color:#222; margin-bottom:2px;')
+            title_label.setStyleSheet('font-size:16px; font-weight:bold; color:#222; margin-bottom:2px; border:none;')
             info_layout.addWidget(title_label)
             # Link
             link = f"https://www.youtube.com/watch?v={v['video_id']}"
-            # Use a clickable QLabel for the link
             link_label = QLabel()
             link_label.setText(f"<a href='{link}' style='color:{CLICKED_LINK_COLOR if link in self.clicked_links else UNCLICKED_LINK_COLOR};'>{link}</a>")
             link_label.setTextFormat(Qt.RichText)
             link_label.setOpenExternalLinks(False)
-            # Connect click to open_link and update clicked_links
+            link_label.setStyleSheet('border:none;')
             def handle_link_click(url=link):
                 import webbrowser
                 webbrowser.open(url)
@@ -478,9 +495,9 @@ class PlaylistSorterQt(QWidget):
                     self.update_playlist_display_links()
             link_label.linkActivated.connect(handle_link_click)
             info_layout.addWidget(link_label)
-            row_layout.addWidget(info_widget)
+            card_layout.addWidget(info_widget, 3)
 
-            self.result_layout.addWidget(row)
+            self.result_layout.addWidget(card)
 
     def get_channel_id(self, url):
         # Accepts channel URL in the form https://www.youtube.com/channel/CHANNEL_ID or /@handle
