@@ -3,3 +3,6 @@ venv/
 venv
 
 memory/*
+installer_files/
+installer_full.iss
+main_app.spec
