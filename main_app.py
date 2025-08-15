@@ -34,6 +34,29 @@ class FetchPlaylistWorker(QThread):
             videos = []
         self.finished.emit(videos, error)
 
+
+# Worker thread for loading a thumbnail image
+class ThumbnailLoader(QThread):
+    loaded = pyqtSignal(object, object)  # (QLabel, QPixmap)
+    def __init__(self, url, label, width, height):
+        super().__init__()
+        self.url = url
+        self.label = label
+        self.width = width
+        self.height = height
+    def run(self):
+        try:
+            import requests
+            from PyQt5.QtGui import QPixmap
+            resp = requests.get(self.url, timeout=5)
+            if resp.status_code == 200:
+                pixmap = QPixmap()
+                pixmap.loadFromData(resp.content)
+                scaled = pixmap.scaled(self.width, self.height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.loaded.emit(self.label, scaled)
+        except Exception:
+            pass
+
 class PlaylistSorterQt(QWidget):
 
 
@@ -713,6 +736,7 @@ class PlaylistSorterQt(QWidget):
         thumb_w = int(card_width * 0.4)
         info_w = int(card_width * 0.6)
         thumb_h = int(thumb_w * 9 / 16)  # 16:9 aspect ratio
+        self._thumb_threads = []  # Store threads to prevent GC
         for v in self.sorted_videos:
             card = QFrame()
             card.setFrameShape(QFrame.StyledPanel)
@@ -736,16 +760,10 @@ class PlaylistSorterQt(QWidget):
             thumb_label.setStyleSheet('border-radius:6px; background:#eee;')
             thumb_url = v.get('thumbnail')
             if thumb_url:
-                try:
-                    import requests
-                    from PyQt5.QtGui import QPixmap
-                    resp = requests.get(thumb_url, timeout=5)
-                    if resp.status_code == 200:
-                        pixmap = QPixmap()
-                        pixmap.loadFromData(resp.content)
-                        thumb_label.setPixmap(pixmap.scaled(thumb_w, thumb_h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                except Exception:
-                    pass
+                thread = ThumbnailLoader(thumb_url, thumb_label, thumb_w, thumb_h)
+                thread.loaded.connect(self._set_thumbnail_pixmap)
+                thread.start()
+                self._thumb_threads.append(thread)
             card_layout.addWidget(thumb_label, 2)
 
             # Info layout (60% width)
@@ -771,18 +789,22 @@ class PlaylistSorterQt(QWidget):
             link_label.setTextFormat(Qt.RichText)
             link_label.setOpenExternalLinks(False)
             link_label.setStyleSheet('border:none;')
-            def handle_link_click(url=link):
+            def handle_link_click(url=link, label=link_label):
                 import webbrowser
                 webbrowser.open(url)
                 if self.current_playlist_id:
                     self.clicked_links.add(url)
                     self.save_clicked_links()
-                    self.update_playlist_display_links()
+                    # Update only this link's color
+                    label.setText(f"<a href='{url}' style='color:{CLICKED_LINK_COLOR};'>{url}</a>")
             link_label.linkActivated.connect(handle_link_click)
             info_layout.addWidget(link_label)
             card_layout.addWidget(info_widget, 3)
 
             self.result_layout.addWidget(card)
+
+    def _set_thumbnail_pixmap(self, label, pixmap):
+        label.setPixmap(pixmap)
 
     def get_channel_id(self, url):
         # Accepts channel URL in the form https://www.youtube.com/channel/CHANNEL_ID or /@handle
