@@ -53,14 +53,15 @@ Welcome to YT Playlist Sorter & Tracker! This guide will help you get started an
 ## 5. Tracking Viewed Playlists
 - Go to the **Viewed Playlists** tab.
 - All playlists you have previously loaded are shown as cards.
+- **Check** button in each playlist to check HOW MANY NEW VIDEOS have been added since your last visit to that playlist.
+- Use **check all** to do this for all videos at once.
 - Each card displays:
   - Number of videos
   - Channel name
   - Playlist name
-  - New videos count (after checking)
-  - **Check** button to update new videos count
+  - New videos count (after checking) 
   - **Load to sorter** button to reload the playlist in the Sort Playlist tab
-- Use **check all** to update new videos count for all playlists at once.
+
 
 ## 6. Configuration Tab
 - Centered card layout for API key management.
