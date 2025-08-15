@@ -58,6 +58,15 @@ class ThumbnailLoader(QThread):
             pass
 
 class PlaylistSorterQt(QWidget):
+    def closeEvent(self, event):
+        # Delete the playlist video cache file on app close
+        cache_path = os.path.join(os.path.dirname(__file__), 'playlist_videos_cache.json')
+        if os.path.exists(cache_path):
+            try:
+                os.remove(cache_path)
+            except Exception:
+                pass
+        event.accept()
 
 
     def __init__(self):
@@ -961,12 +970,29 @@ class PlaylistSorterQt(QWidget):
         if not playlist_id:
             QMessageBox.critical(self, 'Error', 'Invalid playlist URL.')
             return
+
+        # Path for cache file in app folder
+        cache_path = os.path.join(os.path.dirname(__file__), 'playlist_videos_cache.json')
+        cache_data = None
+        cache_exists = os.path.exists(cache_path)
+        cache_valid = False
+        if cache_exists:
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    cache_data = json.load(f)
+                if cache_data.get('playlist_link') == url and 'videos' in cache_data:
+                    cache_valid = True
+            except Exception:
+                cache_data = None
+                cache_valid = False
+
         # Show loading animation and text in widget-based layout
         while self.result_layout.count():
             item = self.result_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
+
         loading_frame = QFrame()
         loading_layout = QVBoxLayout()
         loading_layout.setAlignment(Qt.AlignCenter)
@@ -974,32 +1000,59 @@ class PlaylistSorterQt(QWidget):
         gif_label = QLabel()
         gif_label.setAlignment(Qt.AlignCenter)
         gif_label.setFixedSize(64, 64)
-        try:
-            from PyQt5.QtGui import QMovie
-            gif_path = os.path.join(os.path.dirname(__file__), 'loading.gif')
-            if os.path.exists(gif_path):
-                movie = QMovie(gif_path)
-                movie.setScaledSize(QSize(64, 64))
-                gif_label.setMovie(movie)
-                movie.start()
-            else:
-                gif_label.setText('⏳')
-                gif_label.setStyleSheet('font-size:48px;')
-        except Exception:
-            gif_label.setText('⏳')
-            gif_label.setStyleSheet('font-size:48px;')
         loading_layout.addWidget(gif_label)
-        loading_text = QLabel('fetching...')
+        loading_text = QLabel()
         loading_text.setAlignment(Qt.AlignCenter)
         loading_text.setStyleSheet('font-size:32px; color:#04044b; margin-top:18px; font-weight:bold;')
         loading_layout.addWidget(loading_text)
         self.result_layout.addWidget(loading_frame)
         QApplication.processEvents()
 
-        # Start worker thread to fetch playlist
-        self.fetch_thread = FetchPlaylistWorker(playlist_id)
-        self.fetch_thread.finished.connect(lambda videos, error: self.on_fetch_complete_with_error_popup(videos, error, url, playlist_id))
-        self.fetch_thread.start()
+        if cache_valid:
+            # Show 'Resorting' animation with a suitable emoji
+            gif_label.setText('🔄')  # Resorting emoji
+            gif_label.setStyleSheet('font-size:48px;')
+            loading_text.setText('Resorting...')
+            QApplication.processEvents()
+            # Use cached videos, re-sort and update UI
+            videos = cache_data['videos']
+            self.on_fetch_complete_with_error_popup(videos, None, url, playlist_id)
+        else:
+            # Show fetching animation
+            try:
+                from PyQt5.QtGui import QMovie
+                gif_path = os.path.join(os.path.dirname(__file__), 'loading.gif')
+                if os.path.exists(gif_path):
+                    movie = QMovie(gif_path)
+                    movie.setScaledSize(QSize(64, 64))
+                    gif_label.setMovie(movie)
+                    movie.start()
+                else:
+                    gif_label.setText('⏳')
+                    gif_label.setStyleSheet('font-size:48px;')
+            except Exception:
+                gif_label.setText('⏳')
+                gif_label.setStyleSheet('font-size:48px;')
+            loading_text.setText('fetching...')
+            QApplication.processEvents()
+            # If cache exists but playlist changed, clear it
+            if cache_exists:
+                try:
+                    os.remove(cache_path)
+                except Exception:
+                    pass
+            # Fetch new videos and store in cache after fetch
+            def after_fetch(videos, error):
+                if not error and videos is not None:
+                    try:
+                        with open(cache_path, 'w', encoding='utf-8') as f:
+                            json.dump({'playlist_link': url, 'videos': videos}, f)
+                    except Exception:
+                        pass
+                self.on_fetch_complete_with_error_popup(videos, error, url, playlist_id)
+            self.fetch_thread = FetchPlaylistWorker(playlist_id)
+            self.fetch_thread.finished.connect(after_fetch)
+            self.fetch_thread.start()
 
     def on_fetch_complete_with_error_popup(self, videos, error, url, playlist_id):
         # Remove loading animation after fetch
